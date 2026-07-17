@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>勤怠打刻</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #111; color: #fff; font-family: sans-serif; overflow: hidden; }
+  #wrap { display: flex; flex-direction: column; height: 100%; }
+
+  header {
+    padding: 12px;
+    text-align: center;
+    font-size: 1.3rem;
+    background: #1a2a4a;
+  }
+  #clock { font-size: 2.2rem; font-weight: bold; letter-spacing: 2px; }
+
+  #camArea { position: relative; flex: 1; overflow: hidden; }
+  video { width: 100%; height: 100%; object-fit: cover; }
+
+  /* スキャン枠 */
+  #frame {
+    position: absolute; top: 50%; left: 50%;
+    width: min(60vw, 60vh); height: min(60vw, 60vh);
+    transform: translate(-50%, -50%);
+    border: 4px solid rgba(0, 255, 120, .8);
+    border-radius: 16px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.35);
+    pointer-events: none;
+    display: none;
+  }
+
+  #guide {
+    position: absolute; bottom: 16px; width: 100%;
+    text-align: center; font-size: 1.2rem;
+    text-shadow: 0 1px 4px #000;
+  }
+
+  /* 起動ボタンオーバーレイ */
+  #startOverlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 20px;
+    background: #16213e;
+    padding: 24px; text-align: center;
+  }
+  #startBtn {
+    font-size: 1.8rem; font-weight: bold;
+    padding: 28px 48px;
+    border: none; border-radius: 16px;
+    background: #2e7d32; color: #fff;
+    cursor: pointer;
+  }
+  #startNote { color: #9ab; font-size: 1rem; line-height: 1.6; }
+
+  /* 結果オーバーレイ */
+  #result {
+    position: fixed; inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 16px;
+    z-index: 10;
+    text-align: center;
+    padding: 24px;
+  }
+  #result.ok  { background: #0a7a3c; display: flex; }
+  #result.ng  { background: #a3242c; display: flex; }
+  #resultType { font-size: 4rem; font-weight: bold; }
+  #resultName { font-size: 2.2rem; }
+  #resultMsg  { font-size: 1.4rem; opacity: .9; }
+
+  #status {
+    padding: 8px; text-align: center;
+    font-size: .95rem; color: #aaa; background: #000;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <header>
+    <div id="clock">--:--:--</div>
+    <div>QRコードを枠内にかざしてください</div>
+  </header>
+  <div id="camArea">
+    <video id="video" autoplay muted playsinline></video>
+    <div id="frame"></div>
+    <div id="guide"></div>
+    <div id="startOverlay">
+      <button id="startBtn">タップして打刻画面を起動</button>
+      <div id="startNote">カメラを使用します。<br>許可を求められたら「許可」を押してください。</div>
+    </div>
+  </div>
+  <div id="status">待機中</div>
+</div>
+
+<div id="result">
+  <div id="resultType"></div>
+  <div id="resultName"></div>
+  <div id="resultMsg"></div>
+</div>
+
+<!-- BarcodeDetector非対応端末向けフォールバック -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script>
+// 打刻API（Google Apps Script WebアプリのURL）
+const EXEC_URL = 'https://script.google.com/macros/s/AKfycbwwL1onUKMP_2pVogXQoHromCSvtW6vWVxDwVzSRzGGSw5E6ZbeUwH4NuSOCpQCoT07Gg/exec';
+// アクセスキーはURLの ?key=... から取得（このファイルには埋め込まない）
+const KIOSK_KEY = new URLSearchParams(location.search).get('key') || '';
+
+const video   = document.getElementById('video');
+const guide   = document.getElementById('guide');
+const status_ = document.getElementById('status');
+const result  = document.getElementById('result');
+const overlay = document.getElementById('startOverlay');
+
+const COOLDOWN_MS = 4000;        // 同一QRの二重読み取り防止
+const RESULT_SHOW_MS = 2500;     // 結果表示時間
+let busy = false;
+let lastCode = '';
+let lastCodeAt = 0;
+
+// 時計
+setInterval(() => {
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    [d.getHours(), d.getMinutes(), d.getSeconds()]
+      .map(n => String(n).padStart(2, '0')).join(':');
+}, 250);
+
+document.getElementById('startBtn').addEventListener('click', startCamera);
+
+if (!KIOSK_KEY) {
+  document.getElementById('startNote').textContent =
+    'URLにアクセスキーがありません。管理者から案内された ?key= 付きのURLで開いてください。';
+}
+
+// カメラ起動（背面カメラ優先）
+async function startCamera() {
+  status_.textContent = 'カメラ起動中…';
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+      audio: false
+    });
+    overlay.style.display = 'none';
+    document.getElementById('frame').style.display = 'block';
+    video.srcObject = stream;
+    await video.play();
+    status_.textContent = 'スキャン待機中';
+    startScan();
+  } catch (e) {
+    status_.textContent = 'カメラ起動失敗: ' + e.name;
+    document.getElementById('startNote').textContent =
+      'カメラを起動できません（' + e.name + '）。ブラウザのサイト設定でカメラを「許可」にして、もう一度お試しください。';
+  }
+}
+
+// QRスキャンループ
+async function startScan() {
+  let detector = null;
+  if ('BarcodeDetector' in window) {
+    try {
+      const formats = await BarcodeDetector.getSupportedFormats();
+      if (formats.includes('qr_code')) {
+        detector = new BarcodeDetector({ formats: ['qr_code'] });
+      }
+    } catch (e) { /* jsQRへフォールバック */ }
+  }
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  async function tick() {
+    if (!busy && video.readyState === video.HAVE_ENOUGH_DATA) {
+      let code = null;
+      if (detector) {
+        try {
+          const codes = await detector.detect(video);
+          if (codes.length) code = codes[0].rawValue;
+        } catch (e) { /* 次フレームへ */ }
+      } else if (window.jsQR) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const r = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+        if (r) code = r.data;
+      }
+      if (code) onCode(code);
+    }
+    requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+function onCode(code) {
+  const now = Date.now();
+  if (code === lastCode && now - lastCodeAt < COOLDOWN_MS) return;
+  lastCode = code;
+  lastCodeAt = now;
+  busy = true;
+  status_.textContent = '記録中…';
+
+  // Content-Typeを指定しないシンプルリクエストにするとGASでCORSエラーにならない
+  fetch(EXEC_URL, { method: 'POST', body: JSON.stringify({ id: code, key: KIOSK_KEY }) })
+    .then(res => res.json())
+    .then(showResult)
+    .catch(err => showResult({ ok: false, message: '通信エラー: ' + err.message }));
+}
+
+function showResult(res) {
+  if (res.ok) {
+    beep(true);
+    if (navigator.vibrate) navigator.vibrate(200);
+    result.className = 'ok';
+    document.getElementById('resultType').textContent = res.type;
+    document.getElementById('resultName').textContent = res.name + ' さん';
+    document.getElementById('resultMsg').textContent = res.time + ' に記録しました';
+  } else {
+    beep(false);
+    if (navigator.vibrate) navigator.vibrate([100, 80, 100]);
+    result.className = 'ng';
+    document.getElementById('resultType').textContent = 'エラー';
+    document.getElementById('resultName').textContent = '';
+    document.getElementById('resultMsg').textContent = res.message;
+  }
+  setTimeout(() => {
+    result.className = '';
+    result.style.display = 'none';
+    busy = false;
+    status_.textContent = 'スキャン待機中';
+  }, RESULT_SHOW_MS);
+}
+
+// 成功/失敗音（外部ファイル不要）
+function beep(ok) {
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    o.frequency.value = ok ? 880 : 220;
+    g.gain.setValueAtTime(0.3, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.4);
+    o.start(); o.stop(ac.currentTime + 0.4);
+  } catch (e) { /* 音は必須ではない */ }
+}
+</script>
+</body>
+</html>
