@@ -14,12 +14,11 @@
     position: relative;
   }
   #clock { font-size: 2rem; font-weight: bold; letter-spacing: 2px; }
-  #subtitle { font-size: 1rem; opacity: .85; }
-  #kyotenLabel {
-    position: absolute; right: 10px; top: 10px;
-    font-size: .8rem; color: #9ab; background: rgba(0,0,0,.3);
-    padding: 4px 8px; border-radius: 6px; cursor: pointer;
-  }
+  #orgTitle { font-size: 1.25rem; font-weight: bold; margin-top: 2px; }
+  #companyName { opacity: .9; }
+  #kyotenNameLabel { color: #7be08a; }
+  #gear { cursor: pointer; font-size: 1rem; margin-left: 8px; opacity: .8; }
+  #subtitle { font-size: 1rem; opacity: .85; margin-top: 2px; }
 
   #camArea { position: relative; flex: 1; overflow: hidden; background: #000; }
   /* html5-qrcodeが生成するvideoを全面表示 */
@@ -86,9 +85,9 @@
   }
   #settingsBox h2 { font-size: 1.2rem; }
   #settingsBox label { font-size: .9rem; color: #9ab; }
-  #settingsBox input {
-    font-size: 1.1rem; padding: 12px; border-radius: 8px; border: 1px solid #456;
-    background: #0f1626; color: #fff;
+  #settingsBox input, #settingsBox select {
+    font-size: 1.2rem; padding: 12px; border-radius: 8px; border: 1px solid #456;
+    background: #0f1626; color: #fff; width: 100%;
   }
   #settingsBox .row { display: flex; gap: 10px; justify-content: flex-end; }
   #settingsBox button {
@@ -102,8 +101,8 @@
 <div id="wrap">
   <header>
     <div id="clock">--:--:--</div>
-    <div id="subtitle">QRコードをかざしてください</div>
-    <div id="kyotenLabel">拠点: 未設定 ⚙</div>
+    <div id="orgTitle"><span id="companyName">杉原サポート株式会社</span> <span id="kyotenNameLabel">拠点未設定</span><span id="gear" title="拠点を変更">⚙</span></div>
+    <div id="subtitle">出勤 / 退勤 を選んでください</div>
   </header>
   <div id="camArea">
     <div id="reader"></div>
@@ -129,9 +128,9 @@
 
 <div id="settings">
   <div id="settingsBox">
-    <h2>拠点設定</h2>
-    <label>この端末を設置する拠点IDを入力してください（出勤場所・退勤場所として記録されます）</label>
-    <input id="kyotenInput" type="text" placeholder="例: 12ed8562" autocomplete="off">
+    <h2>拠点の選択</h2>
+    <label>この端末を設置する拠点を選んでください（出勤場所・退勤場所として記録されます）</label>
+    <select id="kyotenSelect"><option value="">読み込み中…</option></select>
     <div class="row">
       <button id="cancelBtn">キャンセル</button>
       <button id="saveBtn">保存</button>
@@ -146,9 +145,9 @@
 const EXEC_URL = 'https://script.google.com/macros/s/AKfycbwNKAfalCU06mubkn3aap1LnoyimYNFdOBM8adK4onD-7WW6Tidqbxceai8aQBpCHgmRQ/exec';
 // アクセスキー（URLの ?key= から取得。HTMLには秘密情報を埋め込まない）
 const KIOSK_KEY = new URLSearchParams(location.search).get('key') || '';
-// 拠点ID: URLの ?kyoten= が最優先、無ければ端末に保存した値を使う
-const urlKyoten = new URLSearchParams(location.search).get('kyoten');
-let KYOTEN_ID = urlKyoten || localStorage.getItem('kyotenId') || '';
+// 拠点: 端末に保存した値を使う（初回は拠点マスタから選択）
+let KYOTEN_ID = localStorage.getItem('kyotenId') || '';
+let KYOTEN_NAME = localStorage.getItem('kyotenName') || '';
 
 const COOLDOWN_MS = 6000;      // 同一QRの連続読み取り防止（前で立ち止まっても再打刻しない）
 const RESULT_SHOW_MS = 2500;   // 結果表示時間
@@ -157,7 +156,9 @@ const status_ = document.getElementById('status');
 const guide   = document.getElementById('guide');
 const result  = document.getElementById('result');
 const overlay = document.getElementById('startOverlay');
-const kyotenLabel = document.getElementById('kyotenLabel');
+const gear = document.getElementById('gear');
+const kyotenNameLabel = document.getElementById('kyotenNameLabel');
+const companyName = document.getElementById('companyName');
 const subtitle = document.getElementById('subtitle');
 
 let html5Qr = null;
@@ -184,23 +185,46 @@ setInterval(() => {
     [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':');
 }, 250);
 
-function refreshKyotenLabel() {
-  kyotenLabel.textContent = '拠点: ' + (KYOTEN_ID || '未設定') + ' ⚙';
+function refreshOrgTitle() {
+  kyotenNameLabel.textContent = KYOTEN_NAME || '拠点未設定';
 }
-refreshKyotenLabel();
+refreshOrgTitle();
 
-// ===== 拠点設定ダイアログ =====
+// ===== 拠点選択ダイアログ =====
 const settings = document.getElementById('settings');
-const kyotenInput = document.getElementById('kyotenInput');
-kyotenLabel.addEventListener('click', () => {
-  kyotenInput.value = KYOTEN_ID;
-  settings.classList.add('show');
+const kyotenSelect = document.getElementById('kyotenSelect');
+
+// 拠点マスタから一覧を取得してプルダウンに反映
+function loadKyotenList() {
+  fetch(EXEC_URL, { method: 'POST', body: JSON.stringify({ action: 'kyotenList', key: KIOSK_KEY }) })
+    .then(res => res.json())
+    .then(data => {
+      if (data.company) companyName.textContent = data.company;
+      const list = data.list || [];
+      kyotenSelect.innerHTML = '<option value="">選択してください</option>' +
+        list.map(k => '<option value="' + k.id + '" data-name="' + k.name + '"' +
+          (k.id === KYOTEN_ID ? ' selected' : '') + '>' + k.name + '</option>').join('');
+      // 保存済みIDの拠点名を最新化
+      const cur = list.find(k => k.id === KYOTEN_ID);
+      if (cur) { KYOTEN_NAME = cur.name; localStorage.setItem('kyotenName', cur.name); refreshOrgTitle(); }
+      // 未設定なら選択を促す
+      if (!KYOTEN_ID) settings.classList.add('show');
+    })
+    .catch(() => { kyotenSelect.innerHTML = '<option value="">取得失敗（通信をご確認ください）</option>'; });
+}
+
+gear.addEventListener('click', () => settings.classList.add('show'));
+document.getElementById('cancelBtn').addEventListener('click', () => {
+  if (KYOTEN_ID) settings.classList.remove('show'); // 未設定のうちは閉じさせない
 });
-document.getElementById('cancelBtn').addEventListener('click', () => settings.classList.remove('show'));
 document.getElementById('saveBtn').addEventListener('click', () => {
-  KYOTEN_ID = kyotenInput.value.trim();
+  const opt = kyotenSelect.options[kyotenSelect.selectedIndex];
+  if (!opt || !opt.value) { alert('拠点を選択してください'); return; }
+  KYOTEN_ID = opt.value;
+  KYOTEN_NAME = opt.getAttribute('data-name') || '';
   localStorage.setItem('kyotenId', KYOTEN_ID);
-  refreshKyotenLabel();
+  localStorage.setItem('kyotenName', KYOTEN_NAME);
+  refreshOrgTitle();
   settings.classList.remove('show');
 });
 
@@ -208,11 +232,13 @@ if (!KIOSK_KEY) {
   document.getElementById('startNote').textContent =
     'URLにアクセスキーがありません。管理者から案内された ?key= 付きのURLで開いてください。';
 }
+loadKyotenList();
 
 // ===== カメラ起動＆連続スキャン =====
 document.getElementById('startBtn').addEventListener('click', startScan);
 
 async function startScan() {
+  if (!KYOTEN_ID) { settings.classList.add('show'); return; }
   if (typeof Html5Qrcode === 'undefined') {
     status_.textContent = 'QRライブラリを読み込めませんでした（通信環境をご確認ください）';
     return;
