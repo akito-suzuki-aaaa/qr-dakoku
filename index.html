@@ -44,17 +44,19 @@
   }
   #startNote { color: #9ab; font-size: 1rem; line-height: 1.6; }
 
-  /* 結果オーバーレイ */
+  /* 結果バナー（上部。カメラを隠さず、スキャンを止めない） */
   #result {
-    position: fixed; inset: 0; z-index: 20; display: none;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20; display: none;
     flex-direction: column; align-items: center; justify-content: center;
-    gap: 16px; text-align: center; padding: 24px;
+    gap: 8px; text-align: center; padding: 24px 16px;
+    pointer-events: none;
   }
-  #result.ok { background: #0a7a3c; display: flex; }
-  #result.ng { background: #a3242c; display: flex; }
-  #resultType { font-size: 3.6rem; font-weight: bold; }
-  #resultName { font-size: 2rem; }
-  #resultMsg  { font-size: 1.3rem; opacity: .9; }
+  #result.ok   { background: rgba(10,122,60,.96);  display: flex; }
+  #result.ng   { background: rgba(163,36,44,.96);  display: flex; }
+  #result.wait { background: rgba(30,64,120,.96);  display: flex; }
+  #resultType { font-size: 3rem; font-weight: bold; }
+  #resultName { font-size: 1.8rem; }
+  #resultMsg  { font-size: 1.2rem; opacity: .9; }
 
   #status { padding: 7px; text-align: center; font-size: .9rem; color: #aaa; background: #000; }
 
@@ -202,15 +204,25 @@ async function startScan() {
   }
 }
 
+// 同じQRを直近に読んだかの判定用（コード→最終読み取り時刻）
+const recentCodes = new Map();
+let hideTimer = null;
+
 function onScanSuccess(decodedText) {
   const now = Date.now();
-  if (busy) return;
-  if (decodedText === lastCode && now - lastCodeAt < COOLDOWN_MS) return;
-  lastCode = decodedText;
-  lastCodeAt = now;
-  busy = true;
-  status_.textContent = '記録中…';
+  // 同一コードのクールダウン（別の人のQRは待たされずすぐ処理される）
+  const last = recentCodes.get(decodedText) || 0;
+  if (now - last < COOLDOWN_MS) return;
+  recentCodes.set(decodedText, now);
+  // 古い履歴を掃除
+  for (const [k, t] of recentCodes) if (now - t > 60000) recentCodes.delete(k);
 
+  // 読み取った瞬間に受付フィードバック（サーバー応答を待たない）
+  beep(true);
+  if (navigator.vibrate) navigator.vibrate(80);
+  showBanner('wait', '受付', '', '送信中…');
+
+  // 送信はバックグラウンド。スキャンは止めないので次の人がすぐかざせる
   fetch(EXEC_URL, {
     method: 'POST',
     body: JSON.stringify({ employeeId: decodedText, kyotenId: KYOTEN_ID, key: KIOSK_KEY })
@@ -222,26 +234,28 @@ function onScanSuccess(decodedText) {
 
 function showResult(res) {
   if (res.ok) {
-    beep(true);
     if (navigator.vibrate) navigator.vibrate(200);
-    result.className = 'ok';
-    document.getElementById('resultType').textContent = res.type;
-    document.getElementById('resultName').textContent = res.name + ' さん';
-    document.getElementById('resultMsg').textContent = res.time + ' ' + res.message;
+    showBanner('ok', res.type, res.name + ' さん', res.time + ' ' + res.message);
   } else {
     beep(false);
     if (navigator.vibrate) navigator.vibrate([100, 80, 100]);
-    result.className = 'ng';
-    document.getElementById('resultType').textContent = 'エラー';
-    document.getElementById('resultName').textContent = '';
-    document.getElementById('resultMsg').textContent = res.message;
+    showBanner('ng', 'エラー', '', res.message);
   }
-  setTimeout(() => {
-    result.className = '';
-    result.style.display = 'none';
-    busy = false;
-    status_.textContent = 'スキャン待機中';
-  }, RESULT_SHOW_MS);
+}
+
+function showBanner(kind, type, name, msg) {
+  result.className = kind;
+  document.getElementById('resultType').textContent = type;
+  document.getElementById('resultName').textContent = name;
+  document.getElementById('resultMsg').textContent = msg;
+  if (hideTimer) clearTimeout(hideTimer);
+  // 「受付(送信中)」は結果が来るまで残す。確定結果(ok/ng)は一定時間で消す
+  if (kind !== 'wait') {
+    hideTimer = setTimeout(() => {
+      result.className = '';
+      result.style.display = 'none';
+    }, RESULT_SHOW_MS);
+  }
 }
 
 // 成功/失敗音（外部ファイル不要）
