@@ -159,6 +159,9 @@ async function startCamera() {
 }
 
 // QRスキャンループ
+// jsQR（クロスプラットフォームで確実に動く）を主エンジンにする。
+// BarcodeDetectorはWindowsデスクトップChromeで「存在するが検出できない」ことが
+// あるため、jsQRが読めない場合の補助としてのみ併用する。
 async function startScan() {
   let detector = null;
   if ('BarcodeDetector' in window) {
@@ -167,28 +170,49 @@ async function startScan() {
       if (formats.includes('qr_code')) {
         detector = new BarcodeDetector({ formats: ['qr_code'] });
       }
-    } catch (e) { /* jsQRへフォールバック */ }
+    } catch (e) { detector = null; }
   }
+
+  if (!window.jsQR && !detector) {
+    status_.textContent = 'QR読み取りエンジンを読み込めませんでした（通信環境をご確認ください）';
+    return;
+  }
+
+  const engineName = window.jsQR ? 'jsQR' : 'BarcodeDetector';
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let frames = 0;
 
   async function tick() {
     if (!busy && video.readyState === video.HAVE_ENOUGH_DATA) {
       let code = null;
-      if (detector) {
+
+      // 主エンジン: jsQR（フレームを縮小して負荷を下げつつ確実に検出）
+      if (window.jsQR) {
+        const vw = video.videoWidth, vh = video.videoHeight;
+        const scale = Math.min(1, 640 / Math.max(vw, vh));
+        canvas.width = Math.round(vw * scale);
+        canvas.height = Math.round(vh * scale);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const r = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+        if (r && r.data) code = r.data;
+      }
+
+      // 補助エンジン: jsQRで読めない時だけBarcodeDetectorを試す
+      if (!code && detector) {
         try {
           const codes = await detector.detect(video);
           if (codes.length) code = codes[0].rawValue;
         } catch (e) { /* 次フレームへ */ }
-      } else if (window.jsQR) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0);
-        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const r = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
-        if (r) code = r.data;
       }
-      if (code) onCode(code);
+
+      if (code) {
+        onCode(code);
+      } else {
+        frames++;
+        if (frames % 15 === 0) status_.textContent = 'スキャン中… (' + engineName + ')';
+      }
     }
     requestAnimationFrame(tick);
   }
