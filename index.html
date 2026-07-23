@@ -44,19 +44,23 @@
   }
   #startNote { color: #9ab; font-size: 1rem; line-height: 1.6; }
 
-  /* 結果バナー（上部。カメラを隠さず、スキャンを止めない） */
+  /* 結果オーバーレイ（全画面。スキャンした瞬間に画面全体が切り替わる） */
   #result {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 20; display: none;
+    position: fixed; inset: 0; z-index: 20; display: none;
     flex-direction: column; align-items: center; justify-content: center;
-    gap: 8px; text-align: center; padding: 24px 16px;
+    gap: 14px; text-align: center; padding: 24px;
     pointer-events: none;
   }
-  #result.ok   { background: rgba(10,122,60,.96);  display: flex; }
-  #result.ng   { background: rgba(163,36,44,.96);  display: flex; }
-  #result.wait { background: rgba(30,64,120,.96);  display: flex; }
-  #resultType { font-size: 3rem; font-weight: bold; }
-  #resultName { font-size: 1.8rem; }
-  #resultMsg  { font-size: 1.2rem; opacity: .9; }
+  #result.ok   { background: #0a7a3c; display: flex; }
+  #result.ng   { background: #a3242c; display: flex; }
+  #result.wait { background: #1e4078; display: flex; }
+  #resultIcon { font-size: 5.5rem; line-height: 1; }
+  #resultType { font-size: 1.6rem; font-weight: bold; opacity: .9; letter-spacing: 2px; }
+  #resultName { font-size: 2.6rem; font-weight: bold; line-height: 1.35; }
+  #resultMsg  { font-size: 1.3rem; opacity: .9; }
+  /* 送信中はアイコンを点滅させて「処理中」を伝える */
+  #result.wait #resultIcon { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
 
   #status { padding: 7px; text-align: center; font-size: .9rem; color: #aaa; background: #000; }
 
@@ -103,6 +107,7 @@
 </div>
 
 <div id="result">
+  <div id="resultIcon"></div>
   <div id="resultType"></div>
   <div id="resultName"></div>
   <div id="resultMsg"></div>
@@ -220,7 +225,7 @@ function onScanSuccess(decodedText) {
   // 読み取った瞬間に受付フィードバック（サーバー応答を待たない）
   beep(true);
   if (navigator.vibrate) navigator.vibrate(80);
-  showBanner('wait', '受付', '', '送信中…');
+  showBanner('wait', '⏳', '受付しました', '', '送信中…');
 
   // 送信はバックグラウンド。スキャンは止めないので次の人がすぐかざせる
   fetch(EXEC_URL, {
@@ -233,20 +238,24 @@ function onScanSuccess(decodedText) {
 }
 
 function showResult(res) {
-  if (res.ok) {
+  if (res.success) {
     if (navigator.vibrate) navigator.vibrate(200);
-    showBanner('ok', res.type, res.name + ' さん', res.time + ' ' + res.message);
+    const icon = res.type === '出勤' ? '▶' : '✅';
+    const sub = res.time ? (res.time + ' 打刻') : '';
+    showBanner('ok', icon, res.message, res.type + (res.slot ? '（' + res.slot + '）' : ''), sub);
   } else {
     beep(false);
     if (navigator.vibrate) navigator.vibrate([100, 80, 100]);
-    showBanner('ng', 'エラー', '', res.message);
+    showBanner('ng', '⚠', res.message, '', '');
   }
 }
 
-function showBanner(kind, type, name, msg) {
+// kind: ok/ng/wait, icon: 絵文字, big: 中央の大きな文字, type: 種別ラベル, msg: 補足
+function showBanner(kind, icon, big, type, msg) {
   result.className = kind;
+  document.getElementById('resultIcon').textContent = icon;
   document.getElementById('resultType').textContent = type;
-  document.getElementById('resultName').textContent = name;
+  document.getElementById('resultName').textContent = big;
   document.getElementById('resultMsg').textContent = msg;
   if (hideTimer) clearTimeout(hideTimer);
   // 「受付(送信中)」は結果が来るまで残す。確定結果(ok/ng)は一定時間で消す
