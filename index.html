@@ -6,90 +6,94 @@
 <title>勤怠打刻</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; background: #111; color: #fff; font-family: sans-serif; overflow: hidden; }
+  html, body { height: 100%; background: #0f1626; color: #fff; font-family: sans-serif; overflow: hidden; }
   #wrap { display: flex; flex-direction: column; height: 100%; }
 
   header {
-    padding: 12px;
-    text-align: center;
-    font-size: 1.3rem;
-    background: #1a2a4a;
+    padding: 10px; text-align: center; background: #1a2a4a;
+    position: relative;
   }
-  #clock { font-size: 2.2rem; font-weight: bold; letter-spacing: 2px; }
-
-  #camArea { position: relative; flex: 1; overflow: hidden; }
-  video { width: 100%; height: 100%; object-fit: cover; }
-
-  /* スキャン枠 */
-  #frame {
-    position: absolute; top: 50%; left: 50%;
-    width: min(60vw, 60vh); height: min(60vw, 60vh);
-    transform: translate(-50%, -50%);
-    border: 4px solid rgba(0, 255, 120, .8);
-    border-radius: 16px;
-    box-shadow: 0 0 0 9999px rgba(0,0,0,.35);
-    pointer-events: none;
-    display: none;
+  #clock { font-size: 2rem; font-weight: bold; letter-spacing: 2px; }
+  #subtitle { font-size: 1rem; opacity: .85; }
+  #kyotenLabel {
+    position: absolute; right: 10px; top: 10px;
+    font-size: .8rem; color: #9ab; background: rgba(0,0,0,.3);
+    padding: 4px 8px; border-radius: 6px; cursor: pointer;
   }
+
+  #camArea { position: relative; flex: 1; overflow: hidden; background: #000; }
+  /* html5-qrcodeが生成するvideoを全面表示 */
+  #reader { width: 100%; height: 100%; }
+  #reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
+  #reader img[alt="Info icon"], #reader__dashboard { display: none !important; }
 
   #guide {
-    position: absolute; bottom: 16px; width: 100%;
-    text-align: center; font-size: 1.2rem;
-    text-shadow: 0 1px 4px #000;
+    position: absolute; bottom: 14px; width: 100%; text-align: center;
+    font-size: 1.1rem; text-shadow: 0 1px 4px #000; pointer-events: none;
   }
 
-  /* 起動ボタンオーバーレイ */
+  /* 起動オーバーレイ */
   #startOverlay {
-    position: absolute; inset: 0;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 20px;
-    background: #16213e;
-    padding: 24px; text-align: center;
+    position: absolute; inset: 0; z-index: 5;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; background: #16213e; padding: 24px; text-align: center;
   }
   #startBtn {
-    font-size: 1.8rem; font-weight: bold;
-    padding: 28px 48px;
-    border: none; border-radius: 16px;
-    background: #2e7d32; color: #fff;
-    cursor: pointer;
+    font-size: 1.8rem; font-weight: bold; padding: 26px 44px;
+    border: none; border-radius: 16px; background: #2e7d32; color: #fff; cursor: pointer;
   }
   #startNote { color: #9ab; font-size: 1rem; line-height: 1.6; }
 
   /* 結果オーバーレイ */
   #result {
-    position: fixed; inset: 0;
-    display: none;
-    flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 16px;
-    z-index: 10;
-    text-align: center;
-    padding: 24px;
+    position: fixed; inset: 0; z-index: 20; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; text-align: center; padding: 24px;
   }
-  #result.ok  { background: #0a7a3c; display: flex; }
-  #result.ng  { background: #a3242c; display: flex; }
-  #resultType { font-size: 4rem; font-weight: bold; }
-  #resultName { font-size: 2.2rem; }
-  #resultMsg  { font-size: 1.4rem; opacity: .9; }
+  #result.ok { background: #0a7a3c; display: flex; }
+  #result.ng { background: #a3242c; display: flex; }
+  #resultType { font-size: 3.6rem; font-weight: bold; }
+  #resultName { font-size: 2rem; }
+  #resultMsg  { font-size: 1.3rem; opacity: .9; }
 
-  #status {
-    padding: 8px; text-align: center;
-    font-size: .95rem; color: #aaa; background: #000;
+  #status { padding: 7px; text-align: center; font-size: .9rem; color: #aaa; background: #000; }
+
+  /* 設定ダイアログ */
+  #settings {
+    position: fixed; inset: 0; z-index: 30; display: none;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.7); padding: 24px;
   }
+  #settings.show { display: flex; }
+  #settingsBox {
+    background: #1a2540; border-radius: 12px; padding: 24px; width: min(92vw, 420px);
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  #settingsBox h2 { font-size: 1.2rem; }
+  #settingsBox label { font-size: .9rem; color: #9ab; }
+  #settingsBox input {
+    font-size: 1.1rem; padding: 12px; border-radius: 8px; border: 1px solid #456;
+    background: #0f1626; color: #fff;
+  }
+  #settingsBox .row { display: flex; gap: 10px; justify-content: flex-end; }
+  #settingsBox button {
+    font-size: 1rem; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer;
+  }
+  #saveBtn { background: #2e7d32; color: #fff; }
+  #cancelBtn { background: #444; color: #fff; }
 </style>
 </head>
 <body>
 <div id="wrap">
   <header>
     <div id="clock">--:--:--</div>
-    <div>QRコードを枠内にかざしてください</div>
+    <div id="subtitle">QRコードをかざしてください</div>
+    <div id="kyotenLabel">拠点: 未設定 ⚙</div>
   </header>
   <div id="camArea">
-    <video id="video" autoplay muted playsinline></video>
-    <div id="frame"></div>
+    <div id="reader"></div>
     <div id="guide"></div>
     <div id="startOverlay">
-      <button id="startBtn">タップして打刻画面を起動</button>
+      <button id="startBtn">タップして打刻を開始</button>
       <div id="startNote">カメラを使用します。<br>許可を求められたら「許可」を押してください。</div>
     </div>
   </div>
@@ -102,22 +106,39 @@
   <div id="resultMsg"></div>
 </div>
 
-<!-- BarcodeDetector非対応端末向けフォールバック -->
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<div id="settings">
+  <div id="settingsBox">
+    <h2>拠点設定</h2>
+    <label>この端末を設置する拠点IDを入力してください（出勤場所・退勤場所として記録されます）</label>
+    <input id="kyotenInput" type="text" placeholder="例: 12ed8562" autocomplete="off">
+    <div class="row">
+      <button id="cancelBtn">キャンセル</button>
+      <button id="saveBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
+// ===== 設定 =====
 // 打刻API（Google Apps Script WebアプリのURL）
 const EXEC_URL = 'https://script.google.com/macros/s/AKfycbwNKAfalCU06mubkn3aap1LnoyimYNFdOBM8adK4onD-7WW6Tidqbxceai8aQBpCHgmRQ/exec';
-// アクセスキーはURLの ?key=... から取得（このファイルには埋め込まない）
+// アクセスキー（URLの ?key= から取得。HTMLには秘密情報を埋め込まない）
 const KIOSK_KEY = new URLSearchParams(location.search).get('key') || '';
+// 拠点ID: URLの ?kyoten= が最優先、無ければ端末に保存した値を使う
+const urlKyoten = new URLSearchParams(location.search).get('kyoten');
+let KYOTEN_ID = urlKyoten || localStorage.getItem('kyotenId') || '';
 
-const video   = document.getElementById('video');
-const guide   = document.getElementById('guide');
+const COOLDOWN_MS = 3000;      // 連続読み取り防止
+const RESULT_SHOW_MS = 2500;   // 結果表示時間
+
 const status_ = document.getElementById('status');
+const guide   = document.getElementById('guide');
 const result  = document.getElementById('result');
 const overlay = document.getElementById('startOverlay');
+const kyotenLabel = document.getElementById('kyotenLabel');
 
-const COOLDOWN_MS = 4000;        // 同一QRの二重読み取り防止
-const RESULT_SHOW_MS = 2500;     // 結果表示時間
+let html5Qr = null;
 let busy = false;
 let lastCode = '';
 let lastCodeAt = 0;
@@ -126,109 +147,74 @@ let lastCodeAt = 0;
 setInterval(() => {
   const d = new Date();
   document.getElementById('clock').textContent =
-    [d.getHours(), d.getMinutes(), d.getSeconds()]
-      .map(n => String(n).padStart(2, '0')).join(':');
+    [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':');
 }, 250);
 
-document.getElementById('startBtn').addEventListener('click', startCamera);
+function refreshKyotenLabel() {
+  kyotenLabel.textContent = '拠点: ' + (KYOTEN_ID || '未設定') + ' ⚙';
+}
+refreshKyotenLabel();
+
+// ===== 拠点設定ダイアログ =====
+const settings = document.getElementById('settings');
+const kyotenInput = document.getElementById('kyotenInput');
+kyotenLabel.addEventListener('click', () => {
+  kyotenInput.value = KYOTEN_ID;
+  settings.classList.add('show');
+});
+document.getElementById('cancelBtn').addEventListener('click', () => settings.classList.remove('show'));
+document.getElementById('saveBtn').addEventListener('click', () => {
+  KYOTEN_ID = kyotenInput.value.trim();
+  localStorage.setItem('kyotenId', KYOTEN_ID);
+  refreshKyotenLabel();
+  settings.classList.remove('show');
+});
 
 if (!KIOSK_KEY) {
   document.getElementById('startNote').textContent =
     'URLにアクセスキーがありません。管理者から案内された ?key= 付きのURLで開いてください。';
 }
 
-// カメラ起動（背面カメラ優先）
-async function startCamera() {
-  status_.textContent = 'カメラ起動中…';
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
-      audio: false
-    });
-    overlay.style.display = 'none';
-    document.getElementById('frame').style.display = 'block';
-    video.srcObject = stream;
-    await video.play();
-    status_.textContent = 'スキャン待機中';
-    startScan();
-  } catch (e) {
-    status_.textContent = 'カメラ起動失敗: ' + e.name;
-    document.getElementById('startNote').textContent =
-      'カメラを起動できません（' + e.name + '）。ブラウザのサイト設定でカメラを「許可」にして、もう一度お試しください。';
-  }
-}
+// ===== カメラ起動＆連続スキャン =====
+document.getElementById('startBtn').addEventListener('click', startScan);
 
-// QRスキャンループ
-// jsQR（クロスプラットフォームで確実に動く）を主エンジンにする。
-// BarcodeDetectorはWindowsデスクトップChromeで「存在するが検出できない」ことが
-// あるため、jsQRが読めない場合の補助としてのみ併用する。
 async function startScan() {
-  let detector = null;
-  if ('BarcodeDetector' in window) {
-    try {
-      const formats = await BarcodeDetector.getSupportedFormats();
-      if (formats.includes('qr_code')) {
-        detector = new BarcodeDetector({ formats: ['qr_code'] });
-      }
-    } catch (e) { detector = null; }
-  }
-
-  if (!window.jsQR && !detector) {
-    status_.textContent = 'QR読み取りエンジンを読み込めませんでした（通信環境をご確認ください）';
+  if (typeof Html5Qrcode === 'undefined') {
+    status_.textContent = 'QRライブラリを読み込めませんでした（通信環境をご確認ください）';
     return;
   }
-
-  const engineName = window.jsQR ? 'jsQR' : 'BarcodeDetector';
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  let frames = 0;
-
-  async function tick() {
-    if (!busy && video.readyState === video.HAVE_ENOUGH_DATA) {
-      let code = null;
-
-      // 主エンジン: jsQR（フレームを縮小して負荷を下げつつ確実に検出）
-      if (window.jsQR) {
-        const vw = video.videoWidth, vh = video.videoHeight;
-        const scale = Math.min(1, 640 / Math.max(vw, vh));
-        canvas.width = Math.round(vw * scale);
-        canvas.height = Math.round(vh * scale);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const r = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
-        if (r && r.data) code = r.data;
-      }
-
-      // 補助エンジン: jsQRで読めない時だけBarcodeDetectorを試す
-      if (!code && detector) {
-        try {
-          const codes = await detector.detect(video);
-          if (codes.length) code = codes[0].rawValue;
-        } catch (e) { /* 次フレームへ */ }
-      }
-
-      if (code) {
-        onCode(code);
-      } else {
-        frames++;
-        if (frames % 15 === 0) status_.textContent = 'スキャン中… (' + engineName + ')';
-      }
-    }
-    requestAnimationFrame(tick);
+  status_.textContent = 'カメラ起動中…';
+  html5Qr = new Html5Qrcode('reader', { verbose: false });
+  const config = {
+    fps: 12,
+    qrbox: (w, h) => { const m = Math.floor(Math.min(w, h) * 0.7); return { width: m, height: m }; },
+    aspectRatio: window.innerWidth / (window.innerHeight - 120),
+  };
+  try {
+    await html5Qr.start({ facingMode: 'environment' }, config, onScanSuccess, () => {});
+    overlay.style.display = 'none';
+    status_.textContent = 'スキャン待機中';
+    guide.textContent = '';
+  } catch (e) {
+    status_.textContent = 'カメラ起動失敗: ' + (e && e.name ? e.name : e);
+    document.getElementById('startNote').textContent =
+      'カメラを起動できません（' + (e && e.name ? e.name : e) + '）。ブラウザのサイト設定でカメラを「許可」にして、もう一度お試しください。';
   }
-  tick();
 }
 
-function onCode(code) {
+function onScanSuccess(decodedText) {
   const now = Date.now();
-  if (code === lastCode && now - lastCodeAt < COOLDOWN_MS) return;
-  lastCode = code;
+  if (busy) return;
+  if (decodedText === lastCode && now - lastCodeAt < COOLDOWN_MS) return;
+  lastCode = decodedText;
   lastCodeAt = now;
   busy = true;
   status_.textContent = '記録中…';
 
-  // Content-Typeを指定しないシンプルリクエストにするとGASでCORSエラーにならない
-  fetch(EXEC_URL, { method: 'POST', body: JSON.stringify({ id: code, key: KIOSK_KEY }) })
+  fetch(EXEC_URL, {
+    method: 'POST',
+    body: JSON.stringify({ employeeId: decodedText, kyotenId: KYOTEN_ID, key: KIOSK_KEY })
+  })
     .then(res => res.json())
     .then(showResult)
     .catch(err => showResult({ ok: false, message: '通信エラー: ' + err.message }));
@@ -241,7 +227,7 @@ function showResult(res) {
     result.className = 'ok';
     document.getElementById('resultType').textContent = res.type;
     document.getElementById('resultName').textContent = res.name + ' さん';
-    document.getElementById('resultMsg').textContent = res.time + ' に記録しました';
+    document.getElementById('resultMsg').textContent = res.time + ' ' + res.message;
   } else {
     beep(false);
     if (navigator.vibrate) navigator.vibrate([100, 80, 100]);
