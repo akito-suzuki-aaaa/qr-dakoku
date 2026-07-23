@@ -136,7 +136,7 @@ const KIOSK_KEY = new URLSearchParams(location.search).get('key') || '';
 const urlKyoten = new URLSearchParams(location.search).get('kyoten');
 let KYOTEN_ID = urlKyoten || localStorage.getItem('kyotenId') || '';
 
-const COOLDOWN_MS = 3000;      // 連続読み取り防止
+const COOLDOWN_MS = 6000;      // 同一QRの連続読み取り防止（前で立ち止まっても再打刻しない）
 const RESULT_SHOW_MS = 2500;   // 結果表示時間
 
 const status_ = document.getElementById('status');
