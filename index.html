@@ -161,19 +161,20 @@ const kyotenLabel = document.getElementById('kyotenLabel');
 const subtitle = document.getElementById('subtitle');
 
 let html5Qr = null;
-let currentMode = '';   // '出勤' or '退勤'（選択必須）
+let currentMode = '';   // 'in'(出勤) or 'out'(退勤)。選択必須。通信は文字化け回避のためASCII
+const MODE_LABEL = { in: '出勤', out: '退勤' };
 
 // ===== 出勤/退勤モード選択 =====
 const modeIn = document.getElementById('modeIn');
 const modeOut = document.getElementById('modeOut');
 function setMode(m) {
   currentMode = m;
-  modeIn.classList.toggle('active', m === '出勤');
-  modeOut.classList.toggle('active', m === '退勤');
-  subtitle.textContent = m ? (m + 'モード：QRをかざしてください') : '出勤 / 退勤 を選んでください';
+  modeIn.classList.toggle('active', m === 'in');
+  modeOut.classList.toggle('active', m === 'out');
+  subtitle.textContent = m ? (MODE_LABEL[m] + 'モード：QRをかざしてください') : '出勤 / 退勤 を選んでください';
 }
-modeIn.addEventListener('click', () => setMode('出勤'));
-modeOut.addEventListener('click', () => setMode('退勤'));
+modeIn.addEventListener('click', () => setMode('in'));
+modeOut.addEventListener('click', () => setMode('out'));
 setMode(''); // 初期は未選択（選択を促す）
 
 // 時計
@@ -264,7 +265,7 @@ function onScanSuccess(decodedText) {
   // 読み取った瞬間に受付フィードバック（サーバー応答を待たない）
   beep(true);
   if (navigator.vibrate) navigator.vibrate(80);
-  showBanner('wait', '⏳', currentMode + ' 受付しました', currentMode, '送信中…');
+  showBanner('wait', '⏳', MODE_LABEL[currentMode] + ' 受付しました', MODE_LABEL[currentMode], '送信中…');
 
   // 送信はバックグラウンド。スキャンは止めないので次の人がすぐかざせる
   fetch(EXEC_URL, {
