@@ -64,7 +64,7 @@
   #result.ng   { background: #a3242c; display: flex; }
   #result.wait { background: #1e4078; display: flex; }
   #resultIcon { font-size: 5.5rem; line-height: 1; }
-  #resultType { font-size: 1.6rem; font-weight: bold; opacity: .9; letter-spacing: 2px; }
+  #resultType { font-size: 1.8rem; font-weight: bold; letter-spacing: 1px; }
   #resultName { font-size: 2.6rem; font-weight: bold; line-height: 1.35; }
   #resultMsg  { font-size: 1.3rem; opacity: .9; }
   /* 送信中はアイコンを点滅させて「処理中」を伝える */
@@ -300,24 +300,34 @@ function onScanSuccess(decodedText) {
   })
     .then(res => res.json())
     .then(showResult)
-    .catch(err => showResult({ ok: false, message: '通信エラー: ' + err.message }));
+    .catch(err => showResult({ success: false, message: '通信エラー: ' + err.message }));
 }
 
 function showResult(res) {
   if (res.success) {
+    // 出勤=おはよう / 退勤=お疲れ様。どちらも「登録しました」を明示
     if (navigator.vibrate) navigator.vibrate(200);
     const icon = res.type === '出勤' ? '▶' : '✅';
-    const sub = res.time ? (res.time + ' 打刻') : '';
-    showBanner('ok', icon, res.message, res.type + (res.slot ? '（' + res.slot + '）' : ''), sub);
+    const greet = res.type === '出勤' ? 'おはようございます！' : 'お疲れ様でした！';
+    showBanner('ok', icon,
+      (res.employeeName || '') + ' さん',                       // 大：氏名
+      '✔ ' + res.type + ' を登録しました',                       // 見出し：登録できた
+      greet + '　' + (res.time || ''),                          // 補足：あいさつ＋時刻
+      RESULT_SHOW_MS);
   } else {
+    // 登録できなかった（理由を表示、少し長めに）
     beep(false);
     if (navigator.vibrate) navigator.vibrate([100, 80, 100]);
-    showBanner('ng', '⚠', res.message, '', '');
+    showBanner('ng', '✖',
+      '登録できませんでした',                                    // 大：はっきり失敗
+      '',
+      res.message || 'エラーが発生しました',                     // 補足：理由
+      4000);
   }
 }
 
-// kind: ok/ng/wait, icon: 絵文字, big: 中央の大きな文字, type: 種別ラベル, msg: 補足
-function showBanner(kind, icon, big, type, msg) {
+// kind: ok/ng/wait, icon: 絵文字, big: 中央の大きな文字, type: 見出しラベル, msg: 補足, dur: 表示ms
+function showBanner(kind, icon, big, type, msg, dur) {
   result.className = kind;
   document.getElementById('resultIcon').textContent = icon;
   document.getElementById('resultType').textContent = type;
@@ -329,7 +339,7 @@ function showBanner(kind, icon, big, type, msg) {
     hideTimer = setTimeout(() => {
       result.className = '';
       result.style.display = 'none';
-    }, RESULT_SHOW_MS);
+    }, dur || RESULT_SHOW_MS);
   }
 }
 
