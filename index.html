@@ -76,6 +76,12 @@
 
   #status { padding: 7px; text-align: center; font-size: .9rem; color: #aaa; background: #000; }
 
+  /* バージョン表示（最新版かの確認用） */
+  #ver {
+    position: fixed; right: 6px; bottom: 3px; z-index: 40;
+    font-size: .7rem; color: #6b7a90; pointer-events: none;
+  }
+
   /* 設定ダイアログ */
   #settings {
     position: fixed; inset: 0; z-index: 30; display: none;
@@ -121,6 +127,7 @@
   </div>
   <div id="status">待機中</div>
 </div>
+<div id="ver"></div>
 
 <div id="result">
   <div id="resultIcon"></div>
@@ -144,6 +151,8 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 // ===== 設定 =====
+// 画面（フロント）のバージョン。更新のたびに上げる。タブレットが最新版かの確認用
+const FRONT_VER = 'v20';
 // 打刻API（Google Apps Script WebアプリのURL）
 const EXEC_URL = 'https://script.google.com/macros/s/AKfycbwNKAfalCU06mubkn3aap1LnoyimYNFdOBM8adK4onD-7WW6Tidqbxceai8aQBpCHgmRQ/exec';
 // アクセスキー（URLの ?key= から取得。HTMLには秘密情報を埋め込まない）
@@ -163,6 +172,8 @@ const gear = document.getElementById('gear');
 const kyotenNameLabel = document.getElementById('kyotenNameLabel');
 const companyName = document.getElementById('companyName');
 const subtitle = document.getElementById('subtitle');
+const verEl = document.getElementById('ver');
+verEl.textContent = '画面 ' + FRONT_VER;
 
 let html5Qr = null;
 let currentMode = '';   // 'in'(出勤) or 'out'(退勤)。選択必須。通信は文字化け回避のためASCII
@@ -202,6 +213,7 @@ function loadKyotenList() {
   fetch(EXEC_URL, { method: 'POST', body: JSON.stringify({ action: 'kyotenList', key: KIOSK_KEY }) })
     .then(res => res.json())
     .then(data => {
+      if (data.v) verEl.textContent = '画面 ' + FRONT_VER + ' / API v' + data.v;
       if (data.company) companyName.textContent = data.company;
       const list = data.list || [];
       kyotenSelect.innerHTML = '<option value="">選択してください</option>' +
