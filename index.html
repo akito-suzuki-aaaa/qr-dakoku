@@ -281,10 +281,12 @@ function onScanSuccess(decodedText) {
     return;
   }
 
-  // 同一コードのクールダウン（別の人のQRは待たされずすぐ処理される）
-  const last = recentCodes.get(decodedText) || 0;
+  // 同一コード×同一モードのクールダウン。
+  // モードが違えば（出勤→退勤）別の打刻なので、同じQRでもすぐ処理する
+  const dedupKey = decodedText + '|' + currentMode;
+  const last = recentCodes.get(dedupKey) || 0;
   if (now - last < COOLDOWN_MS) return;
-  recentCodes.set(decodedText, now);
+  recentCodes.set(dedupKey, now);
   // 古い履歴を掃除
   for (const [k, t] of recentCodes) if (now - t > 60000) recentCodes.delete(k);
 
