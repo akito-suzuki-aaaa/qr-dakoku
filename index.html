@@ -333,6 +333,8 @@ function showResult(res) {
 
 // kind: ok/ng/wait, icon: 絵文字, big: 中央の大きな文字, type: 見出しラベル, msg: 補足, dur: 表示ms
 function showBanner(kind, icon, big, type, msg, dur) {
+  // 表示/非表示はクラスで制御する（インラインdisplayは付けない。
+  //  付けると2回目以降クラスのdisplay:flexを上書きして出なくなる）
   result.className = kind;
   document.getElementById('resultIcon').textContent = icon;
   document.getElementById('resultType').textContent = type;
@@ -341,10 +343,7 @@ function showBanner(kind, icon, big, type, msg, dur) {
   if (hideTimer) clearTimeout(hideTimer);
   // 「受付(送信中)」は結果が来るまで残す。確定結果(ok/ng)は一定時間で消す
   if (kind !== 'wait') {
-    hideTimer = setTimeout(() => {
-      result.className = '';
-      result.style.display = 'none';
-    }, dur || RESULT_SHOW_MS);
+    hideTimer = setTimeout(() => { result.className = ''; }, dur || RESULT_SHOW_MS);
   }
 }
 
